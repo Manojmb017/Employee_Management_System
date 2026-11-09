@@ -11,6 +11,9 @@ from flask_jwt_extended import (
     get_jwt_identity
 )
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 app.config["JWT_SECRET_KEY"] = os.environ["JWT_SECRET_KEY"]
@@ -47,6 +50,7 @@ def convert_date(value):
     return value
 
 
+
 def employee_to_dict(row):
     """Convert database column names to frontend field names."""
     return {
@@ -61,22 +65,29 @@ def employee_to_dict(row):
         "phone": row["phone"],
         "offerStatus": row["offer_status"],
         "offerAcceptanceDate": str(row["offer_acceptance_date"]) if row["offer_acceptance_date"] else "",
+        "documentCollectionStatus": row["document_collection_status"] or "Pending",
         "documentStatus": row["document_status"],
         "backgroundCheckStatus": row["background_check_status"],
         "joiningConfirmation": row["joining_confirmation"],
         "workLocation": row["work_location"],
         "reportingManager": row["reporting_manager"],
+        "onboardingStatus": row["onboarding_status"] or "Pending",
+        "joiningCompleted": bool(row["joining_completed"]),
         "employeeIdCreated": bool(row["employee_id_created"]),
+        "documentVerified": bool(row["document_verified"]),
         "equipmentStatus": row["equipment_status"],
+        "emailAccessStatus": row["email_access_status"] or "Pending",
         "systemAccessStatus": row["system_access_status"],
         "inductionStatus": row["induction_status"],
         "policyAcknowledgement": bool(row["policy_acknowledgement"]),
         "trainingStatus": row["training_status"],
         "mentor": row["mentor"],
+        "probationStartDate": str(row["probation_start_date"]) if row["probation_start_date"] else "",
         "probationEndDate": str(row["probation_end_date"]) if row["probation_end_date"] else "",
         "probationStatus": row["probation_status"],
         "feedback": row["feedback"],
-        "performanceReviewStatus": row["performance_review_status"]
+        "performanceReviewStatus": row["performance_review_status"],
+        "configurationStatus": row["configuration_status"] or "Pending"
     }
 
 
@@ -99,6 +110,7 @@ def get_employees():
     return jsonify(employees)
 
 
+
 # ---------------- ADD EMPLOYEE ----------------
 
 @app.route("/api/employees", methods=["POST"])
@@ -118,14 +130,19 @@ def add_employee():
     query = """
         INSERT INTO employees (
             name, email, department, role, batch, joining_date, status,
-            phone, offer_status, offer_acceptance_date, document_status,
-            background_check_status, joining_confirmation, work_location,
-            reporting_manager, employee_id_created, equipment_status,
-            system_access_status, induction_status, policy_acknowledgement,
-            training_status, mentor, probation_end_date, probation_status,
-            feedback, performance_review_status
+            phone, offer_status, offer_acceptance_date,
+            document_collection_status, document_status,
+            background_check_status, joining_confirmation,
+            work_location, reporting_manager, onboarding_status,
+            joining_completed, employee_id_created, document_verified,
+            equipment_status, email_access_status, system_access_status,
+            induction_status, policy_acknowledgement, training_status,
+            mentor, probation_start_date, probation_end_date,
+            probation_status, feedback, performance_review_status,
+            configuration_status
         )
         VALUES (
+            %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s,
@@ -144,22 +161,29 @@ def add_employee():
         data.get("phone"),
         data.get("offerStatus", "Pending"),
         convert_date(data.get("offerAcceptanceDate")),
+        data.get("documentCollectionStatus", "Pending"),
         data.get("documentStatus", "Pending"),
         data.get("backgroundCheckStatus", "Not Started"),
         data.get("joiningConfirmation", "Pending"),
         data.get("workLocation"),
         data.get("reportingManager"),
+        data.get("onboardingStatus", "Pending"),
+        data.get("joiningCompleted", False),
         data.get("employeeIdCreated", False),
+        data.get("documentVerified", False),
         data.get("equipmentStatus", "Pending"),
+        data.get("emailAccessStatus", "Pending"),
         data.get("systemAccessStatus", "Pending"),
         data.get("inductionStatus", "Pending"),
         data.get("policyAcknowledgement", False),
         data.get("trainingStatus", "Not Started"),
         data.get("mentor"),
+        convert_date(data.get("probationStartDate")),
         convert_date(data.get("probationEndDate")),
         data.get("probationStatus", "In Progress"),
         data.get("feedback"),
-        data.get("performanceReviewStatus", "Pending")
+        data.get("performanceReviewStatus", "Pending"),
+        data.get("configurationStatus", "Pending")
     )
 
     connection = get_connection()
@@ -183,12 +207,16 @@ def add_employee():
         connection.close()
 
 
+
 # ---------------- UPDATE EMPLOYEE ----------------
 
 @app.route("/api/employees/<int:employee_id>", methods=["PUT"])
 @jwt_required()
 def update_employee(employee_id):
     data = request.get_json()
+
+    if not data:
+        return jsonify({"error": "No employee data received"}), 400
 
     query = """
         UPDATE employees SET
@@ -202,22 +230,29 @@ def update_employee(employee_id):
             phone = %s,
             offer_status = %s,
             offer_acceptance_date = %s,
+            document_collection_status = %s,
             document_status = %s,
             background_check_status = %s,
             joining_confirmation = %s,
             work_location = %s,
             reporting_manager = %s,
+            onboarding_status = %s,
+            joining_completed = %s,
             employee_id_created = %s,
+            document_verified = %s,
             equipment_status = %s,
+            email_access_status = %s,
             system_access_status = %s,
             induction_status = %s,
             policy_acknowledgement = %s,
             training_status = %s,
             mentor = %s,
+            probation_start_date = %s,
             probation_end_date = %s,
             probation_status = %s,
             feedback = %s,
-            performance_review_status = %s
+            performance_review_status = %s,
+            configuration_status = %s
         WHERE id = %s
     """
 
@@ -232,22 +267,29 @@ def update_employee(employee_id):
         data.get("phone"),
         data.get("offerStatus", "Pending"),
         convert_date(data.get("offerAcceptanceDate")),
+        data.get("documentCollectionStatus", "Pending"),
         data.get("documentStatus", "Pending"),
         data.get("backgroundCheckStatus", "Not Started"),
         data.get("joiningConfirmation", "Pending"),
         data.get("workLocation"),
         data.get("reportingManager"),
+        data.get("onboardingStatus", "Pending"),
+        data.get("joiningCompleted", False),
         data.get("employeeIdCreated", False),
+        data.get("documentVerified", False),
         data.get("equipmentStatus", "Pending"),
+        data.get("emailAccessStatus", "Pending"),
         data.get("systemAccessStatus", "Pending"),
         data.get("inductionStatus", "Pending"),
         data.get("policyAcknowledgement", False),
         data.get("trainingStatus", "Not Started"),
         data.get("mentor"),
+        convert_date(data.get("probationStartDate")),
         convert_date(data.get("probationEndDate")),
         data.get("probationStatus", "In Progress"),
         data.get("feedback"),
         data.get("performanceReviewStatus", "Pending"),
+        data.get("configurationStatus", "Pending"),
         employee_id
     )
 
@@ -269,6 +311,7 @@ def update_employee(employee_id):
     finally:
         cursor.close()
         connection.close()
+
 
 
 # ---------------- DELETE EMPLOYEE ----------------

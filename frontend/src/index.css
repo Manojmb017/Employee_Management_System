@@ -20,3 +20,50 @@ select {
 button {
   cursor: pointer;
 }
+
+/* HR Action Center */
+
+.action-list {
+  margin-top: 18px;
+}
+
+.action-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #eeeef5;
+}
+
+.action-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.action-item-info strong {
+  font-size: 13px;
+  color: #252842;
+}
+
+.action-item-info small {
+  font-size: 11px;
+  color: #9297aa;
+}
+
+.action-pending {
+  color: #d97706;
+  background: #fff4df;
+  border-radius: 20px;
+  padding: 5px 9px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.action-more {
+  font-size: 12px;
+  color: #777d91;
+  margin-top: 12px;
+}

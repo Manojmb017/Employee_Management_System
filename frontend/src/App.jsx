@@ -4,6 +4,15 @@ import {
   ClipboardList, UserCheck, GraduationCap, CalendarDays, CheckCircle2, TrendingUp, Clock3, ArrowUpRight
 } from "lucide-react";
 import "./App.css";
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip
+} from "recharts";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:5000";
 
@@ -56,6 +65,7 @@ function App() {
 const [loginEmail, setLoginEmail] = useState("");
 const [loginPassword, setLoginPassword] = useState("");
 const [loginError, setLoginError] = useState("");
+const [isLoggingIn, setIsLoggingIn] = useState(false);
 const [hrUser, setHrUser] = useState(
   JSON.parse(sessionStorage.getItem("hr_user") || "null")
 );
@@ -69,7 +79,11 @@ const [hrUser, setHrUser] = useState(
   const [viewingTasksEmployeeId, setViewingTasksEmployeeId] = useState(null);
   async function handleLogin(event) {
   event.preventDefault();
+
+  if (isLoggingIn) return;
+
   setLoginError("");
+  setIsLoggingIn(true);
 
   try {
     const response = await fetch(LOGIN_URL, {
@@ -98,7 +112,9 @@ const [hrUser, setHrUser] = useState(
     setLoginPassword("");
 
   } catch {
-    setLoginError("Could not connect to backend. Is Flask running?");
+    setLoginError("Could not connect to backend. Please try again.");
+  } finally {
+    setIsLoggingIn(false);
   }
 }
 function handleLogout() {
@@ -126,7 +142,6 @@ async function fetchEmployees() {
     if (!response.ok) {
       throw new Error(data.msg || "Could not load employees.");
     }
-
     setEmployees(data);
     setError("");
   } catch (err) {
@@ -235,6 +250,37 @@ async function fetchEmployees() {
       value === "Accepted" || value === "Confirmed" || value === "Issued" ||
       value === "Created" || value === "Collected" || (typeof value === "string" && value.trim() !== "" && ["offerAcceptanceDate", "workLocation", "reportingManager", "mentor", "probationStartDate", "probationEndDate", "feedback"].includes(field));
   };
+  // Collect actual pending HR actions
+
+const allTaskFields = [
+  ...preTasks,
+  ...joiningTasks,
+  ...postTasks
+];
+
+const pendingActionItems = employees.flatMap(employee =>
+  allTaskFields
+    .filter(field => !isDone(employee, field))
+    .map(field => ({
+      employeeId: employee.id,
+      employeeName: employee.name,
+      taskField: field,
+      taskName: taskLabels[field],
+      department: employee.department
+    }))
+);
+const openPendingAction = (action) => {
+  const actionStage = preTasks.includes(action.taskField)
+    ? "pre"
+    : joiningTasks.includes(action.taskField)
+    ? "joining"
+    : "post";
+
+  setPage("onboarding");
+  setStage(actionStage);
+  setViewingTasksEmployeeId(action.employeeId);
+};  
+
 
   const pendingTasks = employees.reduce((total, employee) => {
     return total + [...preTasks, ...joiningTasks, ...postTasks]
@@ -244,6 +290,36 @@ async function fetchEmployees() {
   const upcomingJoiners = employees.filter(employee =>
     employee.status === "Pre-Onboarding" || employee.status === "Joining"
   ).length;
+  // Dashboard analytics
+
+const activeEmployees = employees.filter(
+  employee => String(employee.status || "").trim().toLowerCase() === "active"
+).length;
+
+const inactiveEmployees = employees.filter(
+  employee => String(employee.status || "").trim().toLowerCase() === "inactive"
+).length;
+
+const totalTasks = employees.reduce((total, employee) => {
+  return total + preTasks.length + joiningTasks.length + postTasks.length;
+}, 0);
+
+const completedTasks = employees.reduce((total, employee) => {
+  return total + [...preTasks, ...joiningTasks, ...postTasks]
+    .filter(field => isDone(employee, field)).length;
+}, 0);
+
+const onboardingCompletion = totalTasks
+  ? Math.round((completedTasks / totalTasks) * 100)
+  : 0;
+
+const departmentStats = Object.entries(
+  employees.reduce((departments, employee) => {
+    const department = employee.department || "Unassigned";
+    departments[department] = (departments[department] || 0) + 1;
+    return departments;
+  }, {})
+).map(([name, count]) => ({ name, count }));
 
   async function updateTask(employee, field, value) {
     setError("");
@@ -323,9 +399,7 @@ if (!token) {
             <p className="login-error">{loginError}</p>
           )}
 
-          <button type="submit" className="login-button">
-            Sign In
-          </button>
+          <button type="submit" className="login-button" disabled={isLoggingIn}> {isLoggingIn ? "Signing in..." : "Sign In"}</button>
         </form>
 
         <small>Authorized HR users only</small>
@@ -399,27 +473,142 @@ if (!token) {
         )}
 
         <section className="stats">
-          <div className="stat-card stat-purple">
-            <div className="stat-top"><span>Total Employees</span><div className="stat-icon purple"><Users size={19} /></div></div>
-            <div className="stat-number">{employees.length}</div>
-            <div className="stat-foot"><span className="stat-dot"></span> Employee records in your workspace</div>
-          </div>
-          <div className="stat-card stat-blue">
-            <div className="stat-top"><span>Upcoming Joiners</span><div className="stat-icon blue"><CalendarDays size={19} /></div></div>
-            <div className="stat-number">{upcomingJoiners}</div>
-            <div className="stat-foot"><span className="stat-dot"></span> Pre-onboarding or joining stage</div>
-          </div>
-          <div className="stat-card stat-orange">
-            <div className="stat-top"><span>Tasks to Review</span><div className="stat-icon orange"><ClipboardList size={19} /></div></div>
-            <div className="stat-number">{pendingTasks}</div>
-            <div className="stat-foot"><span className="stat-dot"></span> Open HR checklist items</div>
-          </div>
-          <div className="stat-card stat-green">
-            <div className="stat-top"><span>Completed Tasks</span><div className="stat-icon green"><CheckCircle2 size={19} /></div></div>
-            <div className="stat-number">{Math.max(0, employees.length * 12 - pendingTasks)}</div>
-            <div className="stat-foot"><span className="stat-dot"></span> Across all onboarding stages</div>
-          </div>
-        </section>
+
+  <div className="stat-card stat-purple">
+    <div className="stat-top">
+      <span>Total Employees</span>
+      <div className="stat-icon purple"><Users size={19} /></div>
+    </div>
+    <div className="stat-number">{employees.length}</div>
+    <div className="stat-foot">All employee records</div>
+  </div>
+
+  <div className="stat-card stat-green">
+    <div className="stat-top">
+      <span>Active Employees</span>
+      <div className="stat-icon green"><UserCheck size={19} /></div>
+    </div>
+    <div className="stat-number">{activeEmployees}</div>
+    <div className="stat-foot">Currently active employees</div>
+  </div>
+
+  <div className="stat-card stat-orange">
+    <div className="stat-top">
+      <span>Inactive Employees</span>
+      <div className="stat-icon orange"><Users size={19} /></div>
+    </div>
+    <div className="stat-number">{inactiveEmployees}</div>
+    <div className="stat-foot">Inactive employee records</div>
+  </div>
+
+  <div className="stat-card stat-blue">
+    <div className="stat-top">
+      <span>Upcoming Joiners</span>
+      <div className="stat-icon blue"><CalendarDays size={19} /></div>
+    </div>
+    <div className="stat-number">{upcomingJoiners}</div>
+    <div className="stat-foot">Pre-onboarding or joining</div>
+  </div>
+
+  <div className="stat-card stat-orange">
+    <div className="stat-top">
+      <span>Pending Tasks</span>
+      <div className="stat-icon orange"><ClipboardList size={19} /></div>
+    </div>
+    <div className="stat-number">{pendingTasks}</div>
+    <div className="stat-foot">Tasks awaiting completion</div>
+  </div>
+
+  <div className="stat-card stat-green">
+    <div className="stat-top">
+      <span>Onboarding Completion</span>
+      <div className="stat-icon green"><CheckCircle2 size={19} /></div>
+    </div>
+    <div className="stat-number">{onboardingCompletion}%</div>
+    <div className="stat-foot">Overall checklist progress</div>
+  </div>
+
+</section>
+
+        {page === "dashboard" && (
+  <section className="analytics-grid">
+
+    {/* Department Distribution */}
+    <div className="employee-section analytics-section">
+      <div className="section-heading">
+        <div>
+          <h2>Department Distribution</h2>
+          <p>Employees across departments</p>
+        </div>
+      </div>
+
+      <div className="chart-container">
+        {departmentStats.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={departmentStats}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="name" />
+              <YAxis allowDecimals={false} />
+              <Tooltip />
+              <Bar
+                dataKey="count"
+                fill="#7563ee"
+                radius={[6, 6, 0, 0]}
+                barSize={35}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="empty-state">No department data available.</p>
+        )}
+      </div>
+    </div>
+
+    {/* Workforce Overview */}
+    <div className="employee-section workforce-card">
+      <div className="section-heading">
+        <div>
+          <h2>Workforce Overview</h2>
+          <p>Current employee statistics</p>
+        </div>
+      </div>
+
+      <div className="workforce-stat">
+        <span>Total Employees</span>
+        <strong>{employees.length}</strong>
+      </div>
+
+      <div className="workforce-stat">
+        <span>Active Employees</span>
+        <strong className="active-value">{activeEmployees}</strong>
+      </div>
+
+      <div className="workforce-stat">
+        <span>Inactive Employees</span>
+        <strong className="inactive-value">{inactiveEmployees}</strong>
+      </div>
+
+      <div className="workforce-divider"></div>
+
+      <div className="workforce-progress-heading">
+        <strong>Onboarding Completion</strong>
+        <strong>{onboardingCompletion}%</strong>
+      </div>
+
+      <div className="progress-track workforce-progress">
+        <div
+          className="progress-fill"
+          style={{ width: `${onboardingCompletion}%` }}
+        />
+      </div>
+
+      <p className="workforce-note">
+        {completedTasks} of {totalTasks} checklist tasks completed
+      </p>
+    </div>
+
+  </section>
+)}
 
         {page === "dashboard" && (
           <section className="dashboard-insights">
@@ -434,11 +623,63 @@ if (!token) {
               })}
             </div>
             <div className="insight-card attention-card">
-              <div className="insight-heading"><div><span className="eyebrow">HR ACTION CENTER</span><h2>Needs attention</h2></div><span className="insight-icon attention-icon"><Clock3 size={18}/></span></div>
-              <div className="attention-number">{pendingTasks}<small> open tasks</small></div>
-              <p>Review outstanding onboarding items to keep each employee’s journey moving.</p>
-              <button className="text-action" onClick={() => setPage("onboarding")}>Review onboarding tasks <ArrowUpRight size={16}/></button>
-            </div>
+  <div className="insight-heading">
+    <div>
+      <span className="eyebrow">HR ACTION CENTER</span>
+      <h2>Pending HR Actions</h2>
+    </div>
+    <span className="insight-icon attention-icon">
+      <Clock3 size={18} />
+    </span>
+  </div>
+
+  <div className="attention-number">
+    {pendingActionItems.length}
+    <small> pending actions</small>
+  </div>
+
+  <div className="action-list">
+    {pendingActionItems.slice(0, 5).map((action, index) => (
+      <div
+  className="action-item"
+  key={`${action.employeeId}-${action.taskField}`}
+  role="button"
+  tabIndex={0}
+  onClick={() => openPendingAction(action)}
+  onKeyDown={(event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      openPendingAction(action);
+    }
+  }}
+  title="Click to review this employee's task"
+>
+        <div className="action-item-info">
+          <strong>{action.taskName}</strong>
+          <small>
+            {action.employeeName} · {action.department || "Unassigned"}
+          </small>
+        </div>
+
+        <span className="action-pending">Pending</span>
+      </div>
+    ))}
+  </div>
+
+  {pendingActionItems.length > 5 && (
+    <p className="action-more">
+      + {pendingActionItems.length - 5} more pending actions
+    </p>
+  )}
+
+  <button
+    className="text-action"
+    onClick={() => setPage("onboarding")}
+  >
+    Review all onboarding tasks
+    <ArrowUpRight size={16} />
+  </button>
+</div>
           </section>
         )}
 
@@ -457,10 +698,8 @@ if (!token) {
               <table>
                 <thead><tr><th>EMPLOYEE</th><th>OVERALL PROGRESS</th><th>STAGE</th><th>TASKS</th></tr></thead>
                 <tbody>
-                  {employees.map(employee => {
-                    const progress = getStageProgress(employee);
-                    const isViewing = viewingTasksEmployeeId === employee.id;
-                    return (
+                  {employees.map(employee => {const progress = getStageProgress(employee); const isViewing = String(viewingTasksEmployeeId) === String(employee.id);
+                  return (
                       <Fragment key={employee.id}>
                         <tr>
                           <td><strong>{employee.name}</strong><small className="table-sub">{employee.email}</small></td>
